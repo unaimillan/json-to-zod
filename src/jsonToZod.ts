@@ -17,7 +17,7 @@ export const jsonToZod = (
       case "boolean":
         return "z.boolean()";
       case "object":
-        if(obj === null){
+        if (obj === null) {
           return "z.null()";
         }
         if (seen.find((_obj) => Object.is(_obj, obj))) {
@@ -55,14 +55,14 @@ export const jsonToZod = (
 
   return module
     ? format(
-        `import {z} from "zod"\n\nexport const ${name}=${parse(obj, [])}`,
-        {
-          parser: "babel",
-          plugins: [babelParser],
-        }
-      )
-    : format(`const ${name}=${parse(obj, [])}`, {
+      `import {z} from "zod"\n\nexport const ${name}=${parse(obj, [])}`,
+      {
         parser: "babel",
         plugins: [babelParser],
-      });
+      }
+    )
+    : format(`const ${name}=${parse(obj, [])}`, {
+      parser: "babel",
+      plugins: [babelParser],
+    });
 };
