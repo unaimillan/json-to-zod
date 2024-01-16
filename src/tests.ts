@@ -1,9 +1,42 @@
 import z from "zod"
+import { Command } from 'commander';
+import { read, readFileSync, writeFileSync } from "fs";
+import { formatSchema } from "./jsonToZod";
+
+const program = new Command();
+
+program
+    .description('Convert JSON to Zod')
+    .option('-i, --input <input>', 'Input JSON file')
+    .option('-o, --output <output>', 'Output Zod (.ts) file')
+    .argument('[json...]', 'JSON input')
+
+program.parse(process.argv);
+
+const options = program.opts();
+const args = options.input ? readFileSync(options.input, 'utf8') : program.args.join(' ');
+console.log(options)
+console.log(args)
 
 abstract class ZValue {
     abstract normalize(): ZValue
     abstract merge(other: ZValue): ZValue
     abstract toZod(): string
+}
+
+class ZBoolean extends ZValue {
+    normalize(): ZValue {
+        return this
+    }
+    merge(other: ZValue): ZValue {
+        if (other instanceof ZBoolean) {
+            return this
+        }
+        return new ZUnion([this, other])
+    }
+    toZod(): string {
+        return `z.boolean()`
+    }
 }
 
 class ZNumber extends ZValue {
@@ -21,6 +54,9 @@ class ZNumber extends ZValue {
     }
 }
 
+// Up to 20 literal values
+class ZLiteralString { }
+
 class ZString extends ZValue {
     normalize(): ZValue {
         return this
@@ -35,6 +71,38 @@ class ZString extends ZValue {
         return `z.string()`
     }
 }
+
+class ZNull extends ZValue {
+    normalize(): ZValue {
+        return this
+    }
+    merge(other: ZValue): ZValue {
+        if (other instanceof ZNull) {
+            return this
+        }
+        return new ZUnion([this, other])
+    }
+    toZod(): string {
+        return `z.null()`
+    }
+}
+
+class ZUndefined extends ZValue {
+    normalize(): ZValue {
+        return this
+    }
+    merge(other: ZValue): ZValue {
+        if (other instanceof ZUndefined) {
+            return this
+        }
+        return new ZUnion([this, other])
+    }
+    toZod(): string {
+        return `z.undefined()`
+    }
+}
+
+const ZOptional = (value: ZValue): ZValue => new ZUnion([value, new ZUndefined()])
 
 class ZUnknown extends ZValue {
     normalize(): ZValue {
@@ -103,11 +171,9 @@ class ZArray extends ZValue {
 }
 
 class ZObject extends ZValue {
-    data: {
-        [key: string]: ZString
-    };
+    data: Record<string, ZValue>;
 
-    constructor(data: { [key: string]: ZString }) {
+    constructor(data: Record<string, ZValue>) {
         super()
         this.data = data
     }
@@ -129,7 +195,7 @@ class ZObject extends ZValue {
                 if (otherValue) {
                     resultMap.set(key, value.merge(otherValue))
                 } else {
-                    resultMap.set(key, value)
+                    resultMap.set(key, ZOptional(value))
                 }
             }
             return new ZObject(Object.fromEntries(resultMap.entries()))
@@ -144,40 +210,58 @@ class ZObject extends ZValue {
     }
 }
 
-const parseJson = (obj: any): ZValue => {
+const myObj = new ZArray([
+    new ZObject({
+        a: new ZString(),
+        b: new ZString(),
+    }),
+    new ZObject({
+        a: new ZString(),
+    }),
+    new ZObject({
+        a: new ZString(),
+        c: new ZString(),
+    }),
+]).normalize()
+
+// console.dir(myObj, { depth: null })
+// process.exit(0)
+
+const jsonToZValue = (obj: any): ZValue => {
     switch (typeof obj) {
         case "string":
             return new ZString();
         case "number":
             return new ZNumber();
+        case "boolean":
+            return new ZBoolean();
         case "object":
-            if (Array.isArray(obj)) {
-                const data = obj.map(x => parseJson(x))
-                return new ZArray(data)
+            if (obj === null) {
+              return new ZNull();
             }
-        // const data = Object.entries(obj).map(([k, v]) => ({k:parseJson(v)})).reduce<ZObject>((acc, curr) => ({...acc, ...curr}), {})
-        // return new ZObject(data)
-        // return `z.object({${Object.entries(obj).map(
-        //   ([k, v]) => `'${k}':${parse(v, seen)}`
-        // )}})`;
-        //   case "undefined":
-        //     return "z.undefined()";
-        //   case "function":
-        //     return "z.function()";
-        //   case "symbol":
+            if (Array.isArray(obj)) {
+                return new ZArray(obj.map(x => jsonToZValue(x)))
+            }
+            return new ZObject(Object.fromEntries(Object.entries(obj).map(([k, v]: [string, any]) => [k, jsonToZValue(v)])))
+        case "undefined":
+            return new ZUnknown();
         default:
             return new ZUnknown();
     }
 };
 
 const parseString = (str: string): ZValue => {
-    return parseJson(JSON.parse(str))
+    return jsonToZValue(JSON.parse(str))
 }
 
-const rawInput = `[${process.argv.slice(2)}]`
-const input = JSON.parse(rawInput)
+// const rawInput = `[${process.argv.slice(2)}]`
+const input = JSON.parse(args)
 
-console.log(rawInput)
+console.log(args)
 console.log(input)
-console.log("Parsed", parseJson(input))
-console.log("Normalized", parseJson(input).normalize().toZod())
+console.log("Parsed", jsonToZValue(input).toZod())
+console.log("Normalized", jsonToZValue(input).normalize().toZod())
+
+if (options.output){
+    writeFileSync(options.output, formatSchema(jsonToZValue(input).normalize().normalize().toZod()), 'utf8')
+}
