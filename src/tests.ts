@@ -1,7 +1,8 @@
-import z from "zod"
-import { Command } from 'commander';
+import z, { object } from "zod"
+import { Command, InvalidArgumentError } from 'commander';
 import { read, readFileSync, writeFileSync } from "fs";
 import { formatSchema } from "./jsonToZod";
+import { format } from "prettier";
 
 const program = new Command();
 
@@ -23,6 +24,27 @@ abstract class ZValue {
     abstract merge(other: ZValue): ZValue
     abstract toZod(): string
     abstract paths(): string[]
+    pretty(): string {
+        return format(this.toZod(), {
+            parser: "babel",
+            // plugins: [babelParser],
+          });
+    }
+}
+
+function simplifySingletonUnion(value: ZValue): ZValue {
+    console.log(value)
+    if (value instanceof ZLiteral){
+        return value
+    }
+    if(value instanceof ZUnion && value.data.length == 1){
+        return simplifySingletonUnion(value.data[0])
+    }
+    return value;
+}
+
+function simplify(value: ZValue): ZValue{
+    return simplifySingletonUnion(value)
 }
 
 abstract class ZLiteral extends ZValue { }
@@ -146,33 +168,34 @@ class ZUnion extends ZValue {
     }
 
     normalize(): ZValue {
-        const literalValues = this.data.filter(x => x instanceof ZLiteral)
-        const arrayValues = this.data.filter(x => x instanceof ZArray)
-        const objectValues = this.data.filter(x => x instanceof ZObject)
-        const a = [
-            [1, 2],
-            [","],
-            [null, ""],
-            []
-        ]
-        if (this.data.length === 1) {
-            return this.data[0].normalize()
+        const literals = this.data.filter(x => x instanceof ZLiteral)
+        const arrays = this.data.filter(x => x instanceof ZArray)
+        const objects = this.data.filter(x => x instanceof ZObject)
+        
+        if(arrays.length > 1 || objects.length > 1){
+            throw 'More than one complex type in the union'
         }
-        return new ZUnion([
-            // TODO: check if this is correct
-            this.data.reduce((acc, curr) => acc.merge(curr), new ZUnknown())
-        ])
+        
+        // TODO: check whether this should be done
+        // if (this.data.length === 1) {
+        //     return this.data[0].normalize()
+        // }
+        const obs = objects;
+        const ars = arrays;
+        const lits = Array.from(literals.reduce((acc, cur) => {return acc.set(cur.toZod(), cur)}, new Map<string,ZValue>()).values())
+
+        return new ZUnion([...obs, ...ars, ...lits])
     }
 
     merge(other: ZValue): ZValue {
-        // if (other instanceof ZUnion) {
-        //     return new ZUnion([...this.data, ...other.data]).normalize()
-        // }
+        if (other instanceof ZUnion) {
+            return new ZUnion([...this.data, ...other.data]).normalize()
+        }
         return new ZUnion([...this.data, other])
     }
 
     toZod(): string {
-        return `z.union(${this.data.map(x => x.toZod())})`
+        return `z.union([${this.data.map(x => x.toZod())}])`
     }
     paths(){
         return undefined as any
@@ -187,20 +210,42 @@ class ZArray extends ZValue {
     }
 
     normalize(): ZValue {
-        return new ZArray([
-            this.data.reduce((acc, curr) => acc.merge(curr), new ZUnknown())
-        ])
+        const objects = this.data.filter(x => x instanceof ZObject)
+        const arrays = this.data.filter(x => x instanceof ZArray)
+        const literals = this.data.filter(x => x instanceof ZLiteral)
+
+        let resObj: ZValue[] = [];
+        if(objects.length > 1){
+            resObj = [objects.reduce((acc, cur) => acc.merge(cur))]
+        }else if(objects.length == 1){
+            resObj = [objects[0]];
+        }
+
+        let resArr: ZValue[] = [];
+        if(arrays.length > 1){
+            resArr = [arrays.reduce((acc, cur) => acc.merge(cur))]
+        }else if(arrays.length == 1){
+            resArr = [arrays[0]];
+        }
+
+        // Find unique literal values using JS Map struct with `toZod` as key
+        // and save the ZLiteral values to the array
+        const resLits = Array.from(literals.reduce((acc, cur) => {return acc.set(cur.toZod(), cur)}, new Map<string,ZValue>()).values())
+
+        return new ZArray([new ZUnion([...resObj, ...resArr, ...resLits])])
     }
 
     merge(other: ZValue): ZValue {
         if (other instanceof ZArray) {
-            return new ZArray([...this.data, ...other.data])
+            return new ZArray([...this.data, ...other.data]).normalize()
         }
-        return new ZUnknown()
+        return new ZUnion([new ZArray(this.data), other])
     }
+
     toZod(): string {
         return `z.array(${this.data.map(x => x.toZod())})`
     }
+
     paths(){
         let res: string[] = []
         this.data.forEach((value, idx) => {
@@ -235,13 +280,16 @@ class ZObject extends ZValue {
                 const otherValue = otherMap.get(key)
                 if (otherValue) {
                     resultMap.set(key, value.merge(otherValue))
+                    otherMap.delete(key)
                 } else {
                     resultMap.set(key, ZOptional(value))
                 }
             }
+            otherMap.forEach((val, key) => resultMap.set(key, ZOptional(val)))
+
             return new ZObject(Object.fromEntries(resultMap.entries()))
         }
-        return new ZUnion([this, other])
+        return new ZUnion([this, other]).normalize()
     }
 
     toZod(): string {
@@ -274,8 +322,10 @@ const myObj = new ZArray([
     }),
 ])
 
-// console.dir(myObj.paths())
-// process.exit(0)
+console.dir(myObj.paths())
+console.log(myObj.pretty())
+console.log(simplify(myObj.normalize()).pretty())
+process.exit(0)
 
 const jsonToZValue = (obj: any): ZValue => {
     switch (typeof obj) {
@@ -300,17 +350,13 @@ const jsonToZValue = (obj: any): ZValue => {
     }
 };
 
-const parseString = (str: string): ZValue => {
-    return jsonToZValue(JSON.parse(str))
-}
-
 // const rawInput = `[${process.argv.slice(2)}]`
 const input = JSON.parse(args)
 
 console.log(args)
 console.log(input)
 console.log("Parsed", jsonToZValue(input).toZod())
-console.log("Paths:\n", jsonToZValue(input).paths())
+console.log("Paths:\n", (jsonToZValue(input).paths()))
 
 if (options.output) {
     writeFileSync(options.output, formatSchema(jsonToZValue(input).normalize().normalize().toZod()), 'utf8')
