@@ -22,9 +22,12 @@ abstract class ZValue {
     abstract normalize(): ZValue
     abstract merge(other: ZValue): ZValue
     abstract toZod(): string
+    abstract paths(): string[]
 }
 
-class ZBoolean extends ZValue {
+abstract class ZLiteral extends ZValue { }
+
+class ZBoolean extends ZLiteral {
     normalize(): ZValue {
         return this
     }
@@ -37,9 +40,12 @@ class ZBoolean extends ZValue {
     toZod(): string {
         return `z.boolean()`
     }
+    paths() {
+        return ["bool"]
+    }
 }
 
-class ZNumber extends ZValue {
+class ZNumber extends ZLiteral {
     normalize(): ZValue {
         return this
     }
@@ -52,12 +58,15 @@ class ZNumber extends ZValue {
     toZod(): string {
         return `z.number()`
     }
+    paths(){
+        return ["num"]
+    }
 }
 
 // Up to 20 literal values
 class ZLiteralString { }
 
-class ZString extends ZValue {
+class ZString extends ZLiteral {
     normalize(): ZValue {
         return this
     }
@@ -70,9 +79,12 @@ class ZString extends ZValue {
     toZod(): string {
         return `z.string()`
     }
+    paths(){
+        return ["str"]
+    }
 }
 
-class ZNull extends ZValue {
+class ZNull extends ZLiteral {
     normalize(): ZValue {
         return this
     }
@@ -85,9 +97,12 @@ class ZNull extends ZValue {
     toZod(): string {
         return `z.null()`
     }
+    paths(){
+        return ["null"]
+    }
 }
 
-class ZUndefined extends ZValue {
+class ZUndefined extends ZLiteral {
     normalize(): ZValue {
         return this
     }
@@ -99,6 +114,9 @@ class ZUndefined extends ZValue {
     }
     toZod(): string {
         return `z.undefined()`
+    }
+    paths(){
+        return ["undefined"]
     }
 }
 
@@ -114,6 +132,9 @@ class ZUnknown extends ZValue {
     toZod(): string {
         return `z.unknown()`
     }
+    paths(){
+        return ["unknown"]
+    }
 }
 
 class ZUnion extends ZValue {
@@ -125,6 +146,15 @@ class ZUnion extends ZValue {
     }
 
     normalize(): ZValue {
+        const literalValues = this.data.filter(x => x instanceof ZLiteral)
+        const arrayValues = this.data.filter(x => x instanceof ZArray)
+        const objectValues = this.data.filter(x => x instanceof ZObject)
+        const a = [
+            [1, 2],
+            [","],
+            [null, ""],
+            []
+        ]
         if (this.data.length === 1) {
             return this.data[0].normalize()
         }
@@ -143,6 +173,9 @@ class ZUnion extends ZValue {
 
     toZod(): string {
         return `z.union(${this.data.map(x => x.toZod())})`
+    }
+    paths(){
+        return undefined as any
     }
 }
 
@@ -167,6 +200,14 @@ class ZArray extends ZValue {
     }
     toZod(): string {
         return `z.array(${this.data.map(x => x.toZod())})`
+    }
+    paths(){
+        let res: string[] = []
+        this.data.forEach((value, idx) => {
+            const paths = value.paths();
+            res = res.concat(paths.map(path => `arr[${idx}]/${path}`))
+        })
+        return res;
     }
 }
 
@@ -208,6 +249,15 @@ class ZObject extends ZValue {
             ([k, v]) => `'${k}':${v.toZod()}`
         )}})`;
     }
+
+    paths() {
+        let res: string[] = [];
+        for (const [key, value] of Object.entries(this.data)){
+            const paths = value.paths()
+            res = res.concat(paths.map(path => `obj.${key}/${path}`))
+        }
+        return res;
+    }
 }
 
 const myObj = new ZArray([
@@ -222,9 +272,9 @@ const myObj = new ZArray([
         a: new ZString(),
         c: new ZString(),
     }),
-]).normalize()
+])
 
-// console.dir(myObj, { depth: null })
+// console.dir(myObj.paths())
 // process.exit(0)
 
 const jsonToZValue = (obj: any): ZValue => {
@@ -237,7 +287,7 @@ const jsonToZValue = (obj: any): ZValue => {
             return new ZBoolean();
         case "object":
             if (obj === null) {
-              return new ZNull();
+                return new ZNull();
             }
             if (Array.isArray(obj)) {
                 return new ZArray(obj.map(x => jsonToZValue(x)))
@@ -260,8 +310,8 @@ const input = JSON.parse(args)
 console.log(args)
 console.log(input)
 console.log("Parsed", jsonToZValue(input).toZod())
-console.log("Normalized", jsonToZValue(input).normalize().toZod())
+console.log("Paths:\n", jsonToZValue(input).paths())
 
-if (options.output){
+if (options.output) {
     writeFileSync(options.output, formatSchema(jsonToZValue(input).normalize().normalize().toZod()), 'utf8')
 }
