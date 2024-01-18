@@ -1,5 +1,8 @@
 # Json-to-Zod
 
+> Fork about:
+> Attemp to rewrite conversion logic and add an option to simplify the resulting JSON scheme by reducing a ton of different `z.union`'s on different inner layers
+
 ## Summary
 A very simple CLI tool to convert JSON objects or files into zod schemas.
 ## Usage
