@@ -1,0 +1,88 @@
+{
+  "result": [
+    {
+      "status": "disabled",
+      "name": {
+        "first": "Grover",
+        "middle": "Rowan",
+        "last": "Auer"
+      },
+      "username": "Grover-Auer",
+      "password": "QR2lKf_TvRCLc10",
+      "emails": [
+        "Demetris.Stehr@gmail.com",
+        "Sunny22@gmail.com"
+      ],
+      "phoneNumber": "686.697.3552",
+      "location": {
+        "street": "7454 Marks Keys",
+        "city": "Wheaton",
+        "state": "Washington",
+        "country": "New Caledonia",
+        "zip": "43539-9307",
+        "coordinates": {
+          "latitude": -21.1814,
+          "longitude": -18.3618
+        }
+      },
+      "website": "https://conscious-macadamia.org/",
+      "domain": "gentle-encouragement.net",
+      "job": {
+        "title": "Forward Research Officer",
+        "descriptor": "Senior",
+        "area": "Accounts",
+        "type": "Liaison",
+        "company": "Pollich Group"
+      },
+      "creditCard": {
+        "number": "6498-6208-2180-5027-8697",
+        "cvv": "151",
+        "issuer": "diners_club"
+      },
+      "uuid": "cdd452e8-0fac-4b89-9fe9-c19d788dee3e",
+      "objectId": "65a432d3a6a6f447fafdda1f"
+    },
+    {
+      "status": "active",
+      "name": {
+        "first": "Andy",
+        "middle": "Jamie",
+        "last": "Durgan"
+      },
+      "username": "Andy-Durgan",
+      "password": "vSVPi4atAz9jEaO",
+      "emails": [
+        "Jordyn91@gmail.com",
+        "Adriel56@example.com"
+      ],
+      "phoneNumber": "(673) 485-3413 x5148",
+      "location": {
+        "street": "937 Nicola Parkway",
+        "city": "Taylorsville",
+        "state": "North Dakota",
+        "country": "Marshall Islands",
+        "zip": "02897",
+        "coordinates": {
+          "latitude": 64.4665,
+          "longitude": -152.4844
+        }
+      },
+      "website": "https://unrealistic-pounding.com/",
+      "domain": "ambitious-pickle.info",
+      "job": {
+        "title": "Direct Program Engineer",
+        "descriptor": "Direct",
+        "area": "Response",
+        "type": "Administrator",
+        "company": "Pacocha - Hauck"
+      },
+      "creditCard": {
+        "number": "3529-6270-8592-1068",
+        "cvv": "595",
+        "issuer": "visa"
+      },
+      "uuid": "2ce7bc60-9f48-4bac-8b5a-720532b186b0",
+      "objectId": "65a432d3a6a6f447fafdda20"
+    }
+  ]
+}
